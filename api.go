@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
 )
 
 type APIServer struct {
 	listAddress string
+	storage     Storage
 }
 
 type apiFunc func(w http.ResponseWriter, r *http.Request) error // ours
@@ -32,9 +34,10 @@ func makeHTTPHandleFunc(f apiFunc) http.HandlerFunc {
 	}
 }
 
-func NewAPIServer(listAddress string) *APIServer {
+func NewAPIServer(listAddress string, storage Storage) *APIServer {
 	return &APIServer{
 		listAddress: listAddress,
+		storage:     storage,
 	}
 }
 
@@ -53,28 +56,37 @@ func (s *APIServer) handleAccount(w http.ResponseWriter, r *http.Request) error 
 	if r.Method == "POST" {
 		return s.handleCreateAccount(w, r)
 	}
-	if r.Method == "DELETE" {
-		return s.handleDeleteAccount(w, r)
+	if r.Method == "GET" {
+		return s.handleGetAccount(w, r)
 	}
-	return fmt.Errorf("Method Not Allowed")
+	return fmt.Errorf("method Not allowed")
 }
 
 func (s *APIServer) handleGetAccount(w http.ResponseWriter, r *http.Request) error {
-	id := mux.Vars(r)["id"]
-	println("id:", id)
-	account := NewAccount("inblack67")
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		return err
+	}
+	account, err := s.storage.getAccount(id)
+	if err != nil {
+		return err
+	}
 	writeJSON(w, http.StatusOK, account)
 	return nil
 }
 
 func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) error {
-	return nil
-}
+	payload := new(CreateAccountReq)
+	if err := json.NewDecoder(r.Body).Decode(payload); err != nil {
+		return err
+	}
+	account := NewAccount(payload.Username)
 
-func (s *APIServer) handleDeleteAccount(w http.ResponseWriter, r *http.Request) error {
-	return nil
-}
+	newAcc, err := s.storage.createAccount(account)
 
-func (s *APIServer) handleTransfer(w http.ResponseWriter, r *http.Request) error {
-	return nil
+	if err != nil {
+		return nil
+	}
+
+	return writeJSON(w, http.StatusCreated, newAcc)
 }
